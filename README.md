@@ -1,3 +1,7 @@
+<p align="center">
+  <img src="docs/images/banner.png" alt="OpenCATO - 一只住在企业微信里的 AI 提醒猫" width="100%">
+</p>
+
 # OpenCATO 🐱
 
 > 一只住在企业微信里的 AI 提醒猫 —— 看到「微信里的提醒猫」这类付费项目后，想开源学习一下它是怎么做的，于是有了这个从企业微信合规通道、定时提醒引擎到猫设 prompt 的完整独立实现。
@@ -11,6 +15,8 @@
 
 ## 这是什么
 
+<img src="docs/images/logo.png" alt="OpenCATO 吉祥物 喵小盯" align="right" width="130">
+
 市面上出现了「住在微信里的小猫」一类的付费订阅产品（计划整理 + 定时督促 + 专注计时 + 打卡陪伴）。OpenCATO 是一个**学习性质的开源复刻**：把这类产品拆解为可自托管的最小实现，代码全部独立编写，MIT 协议，供想研究「AI 陪伴 + 消息提醒」产品形态的同学参考。
 
 关键词：企业微信机器人 / WeCom bot / 微信提醒猫 / AI 伴侣 / LLM 应用 / 定时提醒 / 番茄钟 / 打卡 / FastAPI / SQLite
@@ -23,6 +29,12 @@
 - ✅ **每日打卡**：`打卡`，记录累计天数
 - 📋 **计划查看**：`计划`，列出待触发的提醒
 - 🔒 **合规通道**：只使用企业微信官方 API，主动推送走应用消息，不碰个人号协议
+
+## 效果预览
+
+<p align="center">
+  <img src="docs/images/demo.png" alt="OpenCATO 对话演示：定时提醒、番茄钟、打卡" width="360">
+</p>
 
 ## 为什么是企业微信（WeCom）
 
@@ -68,6 +80,13 @@ uvicorn app.main:app --host 0.0.0.0 --port 8000
 
 ## 架构
 
+<p align="center">
+  <img src="docs/images/architecture.png" alt="OpenCATO 架构图：企业微信回调 → FastAPI → LLM / 定时引擎 → 主动推送" width="100%">
+</p>
+
+<details>
+<summary>文字版架构（点开展开）</summary>
+
 ```
 用户 ──► 企业微信 ──回调──► FastAPI (app/main.py)
                               ├─ 解密 (wecom_crypto) → 指令解析 (commands) ─┐
@@ -76,6 +95,8 @@ uvicorn app.main:app --host 0.0.0.0 --port 8000
                               └─ 主动推送 (wecom_api) ◄─────────────────────┘
                               └─ SQLite (db)：用户 / 提醒 / 打卡
 ```
+
+</details>
 
 ## 测试
 
