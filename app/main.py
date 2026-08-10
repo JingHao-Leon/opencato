@@ -1,6 +1,7 @@
 """MeowMinder 入口：企业微信回调 + 提醒引擎。"""
 import asyncio
 import logging
+from contextlib import asynccontextmanager
 
 from fastapi import FastAPI, Query, Request
 from fastapi.responses import PlainTextResponse
@@ -13,13 +14,16 @@ logging.basicConfig(level=logging.INFO)
 log = logging.getLogger("meowminder")
 
 crypt = WXBizMsgCrypt(config.WECOM_TOKEN, config.WECOM_ENCODING_AES_KEY, config.WECOM_CORP_ID)
-app = FastAPI(title="MeowMinder", version="0.1.0")
 
 
-@app.on_event("startup")
-def startup():
+@asynccontextmanager
+async def lifespan(app: FastAPI):
     db.init()
     scheduler.start()
+    yield
+
+
+app = FastAPI(title="MeowMinder", version="0.1.0", lifespan=lifespan)
 
 
 @app.get("/wecom/callback", response_class=PlainTextResponse)
@@ -48,8 +52,14 @@ async def receive_callback(
         return "success"  # 仍回 success，避免企业微信反复重试
 
     if msg.get("MsgType") == "text":
-        asyncio.create_task(_handle_text(msg))
+        # 保留任务强引用，否则协程可能被 GC 提前回收（"Task was destroyed but it is pending"）
+        task = asyncio.create_task(_handle_text(msg))
+        _background_tasks.add(task)
+        task.add_done_callback(_background_tasks.discard)
     return "success"  # 立即响应，回复走主动推送，规避回调超时
+
+
+_background_tasks: set[asyncio.Task] = set()
 
 
 async def _handle_text(msg: dict):
