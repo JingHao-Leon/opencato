@@ -1,15 +1,17 @@
-<p align="center">
-  <img src="docs/images/banner.png" alt="OpenCATO - 一只住在企业微信里的 AI 提醒猫" width="100%">
-</p>
+<div align="center">
+
+<img src="docs/images/banner.png" alt="OpenCATO - 一只住在企业微信里的 AI 提醒猫" width="100%">
 
 # OpenCATO 🐱
 
-> 一只住在企业微信里的 AI 提醒猫 —— 看到「微信里的提醒猫」这类付费项目后，想开源学习一下它是怎么做的，于是有了这个从企业微信合规通道、定时提醒引擎到猫设 prompt 的完整独立实现。
+**一只住在企业微信里的 AI 提醒猫 —— 看到「微信里的提醒猫」这类付费项目后，想开源学习一下它是怎么做的，于是有了这个从企业微信合规通道、定时提醒引擎到猫设 prompt 的完整独立实现**
 
 [![License: MIT](https://img.shields.io/badge/License-MIT-yellow.svg)](LICENSE)
 [![Python 3.10+](https://img.shields.io/badge/python-3.10+-blue.svg)](https://www.python.org/)
 [![FastAPI](https://img.shields.io/badge/FastAPI-0.110+-009688.svg)](https://fastapi.tiangolo.com/)
 [![PRs Welcome](https://img.shields.io/badge/PRs-welcome-brightgreen.svg)](CONTRIBUTING.md)
+
+</div>
 
 **English**: An open-source AI reminder cat living in WeCom (Enterprise WeChat) — schedule reminders, Pomodoro focus timer, daily check-ins and LLM companionship through the official WeCom API. Built for learning how "a cat living in your chat app" products actually work.
 
@@ -78,6 +80,32 @@ uvicorn app.main:app --host 0.0.0.0 --port 8000
 | `LLM_BASE_URL` | OpenAI 兼容接口地址，默认 Moonshot |
 | `LLM_MODEL` | 模型名，默认 `kimi-k2-0905-preview` |
 
+## 常见问题（FAQ）
+
+**Q：想自己部署一只，最少要配哪些东西？**
+
+A：一台能跑 Python 3.10+ 的机器 + 一个企业微信自建应用。`cp .env.example .env` 后必填 6 项企业微信与 LLM 配置（`WECOM_CORP_ID` / `WECOM_AGENT_ID` / `WECOM_SECRET` / `WECOM_TOKEN` / `WECOM_ENCODING_AES_KEY` / `LLM_API_KEY`），`LLM_BASE_URL`、`LLM_MODEL`、`DATABASE_PATH` 不填走默认，然后 `uvicorn app.main:app --host 0.0.0.0 --port 8000` 即可。任何必填项缺失进程会直接启动失败——配置在应用加载时硬读取，属于故意的 fail-fast 设计。
+
+**Q：企业微信回调 URL 怎么填？为什么一直验证不过？**
+
+A：在自建应用的「接收消息 → 设置 API 接收」里，URL 填 `https://你的域名/wecom/callback`，Token 和 EncodingAESKey 必须与 `.env` 中 `WECOM_TOKEN` / `WECOM_ENCODING_AES_KEY` 完全一致。**要先启动服务再点「保存」**：验证请求由 `GET /wecom/callback` 处理，服务没起、签名不符都会导致验证失败。本地开发没有公网 HTTPS 时，用内网穿透（localhost.run / cpolar / 花生壳）暴露 8000 端口。
+
+**Q：LLM 用的什么模型？能换 DeepSeek / 通义吗？**
+
+A：能。代码只要求一个 OpenAI 兼容的 `/chat/completions` 接口（见 `app/llm.py`），默认指向 Moonshot（`https://api.moonshot.cn/v1` + `kimi-k2-0905-preview`）；换成 DeepSeek、通义等只需改 `LLM_BASE_URL` / `LLM_MODEL` 两个环境变量并填对应的 `LLM_API_KEY`。另外只有正则指令没接住的消息才会走 LLM——「打卡」「计划」等固定指令不消耗 token。
+
+**Q：怎么和猫交互？支持哪些说法？**
+
+A：直接发消息：`提醒我 18:30 吃药` / `明天早上8点提醒我开会` / `30分钟后提醒我喝水` / `开始专注 25 分钟` / `打卡` / `计划`。指令解析基于正则，只认有限的中文句式（详见下文局限）；没被识别的消息一律转给 LLM 闲聊，所以随口聊天也不会报错。
+
+**Q：和市面上「微信里的提醒猫」付费产品是什么关系？**
+
+A：没有关系。本项目是看到这类产品后出于学习目的的**独立实现**：未使用其任何素材、文案或品牌资源，也未逆向其协议，全部代码与猫设 prompt 从零编写，MIT 协议开源，仅供学习交流。
+
+**Q：数据都存在哪？会丢吗？**
+
+A：全部在单个 SQLite 文件里（环境变量 `DATABASE_PATH`，默认 `./meowminder.db`），只有 users / reminders / checkins 三张表，备份就是拷贝这个文件；数据库文件已被 `.gitignore` 排除，不会被误提交。
+
 ## 架构
 
 <p align="center">
@@ -114,6 +142,15 @@ python -m pytest tests -q
 - [ ] 订阅会员状态（支付对接）
 - [ ] 多猫设与皮肤
 - [ ] Web 管理面板
+
+## 局限与已知问题（Limitations）
+
+- **单实例设计，不能水平扩展**：定时引擎是进程内后台线程每 20 秒轮询一次到期提醒（`app/scheduler.py`），SQLite 为单连接 + 进程内锁。起多个副本或多 worker 会导致同一条提醒被重复推送；提醒触发精度也受 20 秒轮询间隔限制。
+- **LLM 没有跨轮记忆**：每次闲聊只发送猫设 system prompt + 当前这一条消息（`app/llm.py`），没有会话历史存储——猫设里「记住用户目标」目前只靠单轮上下文，代码层面并不记得上一轮聊了什么。
+- **指令解析是正则，句式覆盖有限**：只支持「明天/后天 + 时段 + 时刻」两种语序和「N 分钟后」相对提醒，时刻必须带「点 / ： / 半」以防误判；不支持「每周三」「下周一」等日期表达，也没有循环 / 重复提醒。
+- **只处理文本消息**：回调仅响应 `MsgType=text`（`app/main.py`），图片、语音、表情包不会得到回复；主动推送同样只有文本一种格式。
+- **LLM 输出未接内容审核**：模型回复会原样推送给用户，部署者需按免责声明自行接入内容审核并遵守当地法律法规。
+- **时间依赖服务器本地时区**：指令解析与调度全部使用 `datetime.now()`，若服务器时区不是 UTC+8，提醒时间会整体错位。
 
 ## 免责声明
 
